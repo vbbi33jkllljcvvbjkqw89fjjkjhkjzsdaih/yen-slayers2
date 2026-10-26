@@ -178,6 +178,11 @@ function Farm.QuestFilter(Quest)
 	end
 
 	return function(Model)
+		--/ A disguised target is shown wrapped in asterisks, like *Civilian*, while the real civilians stay plain. Those are the quest's mobs
+		if string.find(Model.Name, "^%*.+%*$") then
+			return true
+		end
+
 		local Name = Squash(Model.Name)
 
 		for _, Code in Codes do
