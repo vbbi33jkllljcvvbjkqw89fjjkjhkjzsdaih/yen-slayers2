@@ -208,6 +208,7 @@ function Farm.Body()
 	local Gyro = nil
 	local LastMove = nil
 	local SnapPrev = nil
+	local LastSet = nil
 
 	local function ClearPlatform()
 		if Platform then
@@ -255,6 +256,7 @@ function Farm.Body()
 		RestUntil = 0
 		LastMove = nil
 		SnapPrev = nil
+		LastSet = nil
 	end
 
 	function Body.Hold(Model, Humanoid)
@@ -307,8 +309,34 @@ function Farm.Body()
 		Mover, Gyro = Position, Spin
 	end
 
-	--/ Pulls the root toward Goal at Speed with a BodyPosition, facing Face. Returns the distance left and whether the server snapped us
+	--/ Instantly sets the root at Goal facing Face. Snap is detected by us arriving far from where we last put ourselves (the server pulled us)
+	local function Teleport(Root, Goal, Face)
+		ClearMover()
+
+		local Snapped = LastSet ~= nil and (Root.Position - LastSet).Magnitude > 30
+
+		if Face and (Vector3.new(Face.X, Goal.Y, Face.Z) - Goal).Magnitude > 0.1 then
+			Root.CFrame = CFrame.lookAt(Goal, Vector3.new(Face.X, Goal.Y, Face.Z))
+		else
+			Root.CFrame = CFrame.new(Goal) * (Root.CFrame - Root.CFrame.Position)
+		end
+
+		Root.AssemblyLinearVelocity = Vector3.zero
+		Root.AssemblyAngularVelocity = Vector3.zero
+
+		LastSet = Goal
+
+		return (Goal - Root.Position).Magnitude, Snapped
+	end
+
+	--/ Moves the root toward Goal, facing Face. Teleport sets it there at once, Fly pulls it with a BodyPosition. Returns distance left and whether the server snapped us
 	function Body.Move(Root, Goal, Speed, Face)
+		if Farm.Settings().Move == "Teleport" then
+			return Teleport(Root, Goal, Face)
+		end
+
+		LastSet = nil
+
 		Ensure(Root)
 
 		local Now = os.clock()
@@ -348,8 +376,14 @@ function Farm.Body()
 		return Distance, Snapped
 	end
 
-	--/ Like Move but hops: pauses on a dropped platform every HopDistance studs. Returns distance left, whether resting, whether snapped
+	--/ Like Move but hops: pauses on a dropped platform every HopDistance studs. Teleport needs no hops. Returns distance left, whether resting, whether snapped
 	function Body.Travel(Root, Goal, Speed, Face)
+		if Farm.Settings().Move == "Teleport" then
+			local Distance, Snapped = Teleport(Root, Goal, Face)
+
+			return Distance, false, Snapped
+		end
+
 		local Now = os.clock()
 		local Distance = (Goal - Root.Position).Magnitude
 
@@ -408,6 +442,7 @@ function Farm.Settings()
 
 	if not Settings then
 		Settings = {
+			Move = "Teleport",
 			Weapon = "Auto",
 			Position = "Behind and up",
 			Back = 6,
@@ -440,6 +475,10 @@ function Farm.BuildSettings(Feature)
 
 	table.sort(Styles, function(A, B)
 		return A == "Auto" or (B ~= "Auto" and A < B)
+	end)
+
+	Feature.Dropdown("Move", "Movement", { "Teleport", "Fly" }, State.Move, function(Value)
+		State.Move = Value
 	end)
 
 	Feature.Dropdown("Weapon", "Weapon", Styles, State.Weapon, function(Value)
