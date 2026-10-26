@@ -154,6 +154,11 @@ function Farm.Info(Name)
 end
 
 --/ Mobs the quest wants killed, read from its task codes. A code like KaruVillageBandit matches a mob called Bandit
+--/ Lowercase and drop spaces and punctuation, so a quest code like "VillageSpy" matches a mob called "Village Spy"
+local function Squash(Text)
+	return (string.gsub(string.lower(tostring(Text)), "[^%a%d]", ""))
+end
+
 function Farm.QuestFilter(Quest)
 	local Codes = {}
 	local Tasks = Quest and Dig(Quest, { "Tasks" })
@@ -164,7 +169,7 @@ function Farm.QuestFilter(Quest)
 		local Max = Task:FindFirstChild("Max")
 
 		if Code and Code.Value ~= "" and (not Value or not Max or Value.Value < Max.Value) then
-			table.insert(Codes, string.lower(Code.Value))
+			table.insert(Codes, Squash(Code.Value))
 		end
 	end
 
@@ -173,10 +178,10 @@ function Farm.QuestFilter(Quest)
 	end
 
 	return function(Model)
-		local Name = string.lower(Model.Name)
+		local Name = Squash(Model.Name)
 
 		for _, Code in Codes do
-			if Code == Name or string.find(Code, Name, 1, true) or string.find(Name, Code, 1, true) then
+			if Code ~= "" and Name ~= "" and (Code == Name or string.find(Code, Name, 1, true) or string.find(Name, Code, 1, true)) then
 				return true
 			end
 		end

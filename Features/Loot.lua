@@ -116,17 +116,27 @@ return {
 			local Started = os.clock()
 			local Last, Checked = Root.Position, os.clock()
 
+			--/ Fire the prompt as soon as we are within its reach, no need to land right on top of it
+			local Reach = math.max((Prompt.MaxActivationDistance or 10) - 2, 5)
+
 			while State.Enabled and Item.Parent and Farm.Character() and os.clock() - Started < 40 do
 				local Left, Resting, Snapped = Body.Travel(Root, Target.Position + Vector3.new(0, 2, 0), State.Speed)
 
 				if Snapped then
-					Message = "Server snapped you back, stopped"
-					State.Enabled = false
+					--/ Wait out the rubber band and keep collecting when Resume is on, otherwise stop
+					if Farm.Settings().Resume then
+						Body.Release()
+						Message = "Rubber band, waiting it out"
+						task.wait(Farm.Settings().ResumeDelay)
+					else
+						Message = "Server snapped you back, stopped"
+						State.Enabled = false
 
-					break
+						break
+					end
 				end
 
-				if Left < 6 then
+				if Left < Reach then
 					break
 				end
 
