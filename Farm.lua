@@ -451,6 +451,8 @@ function Farm.Settings()
 			Rate = 0.25,
 			Retreat = 25,
 			Region = "All regions",
+			Resume = true,
+			ResumeDelay = 2.5,
 			Advanced = false,
 		}
 
@@ -489,6 +491,11 @@ function Farm.BuildSettings(Feature)
 		State.Position = Value
 	end)
 
+	--/ On a rubber band, wait it out and carry on instead of stopping for good
+	Feature.Toggle("Resume", "Resume on rubber band", State.Resume, function(Value)
+		State.Resume = Value
+	end)
+
 	local Names = { "All regions" }
 	local Regions = Farm.Regions()
 
@@ -520,6 +527,10 @@ function Farm.BuildSettings(Feature)
 		Feature.Slider("Retreat", "Pause below health %", 0, 90, State.Retreat, function(Value)
 			State.Retreat = Value
 		end),
+
+		Feature.Slider("ResumeDelay", "Rubber band wait (s)", 0.5, 8, State.ResumeDelay, function(Value)
+			State.ResumeDelay = Value
+		end, 0.5),
 	}
 
 	local function Show(Value)
@@ -541,7 +552,7 @@ function Farm.new(Feature, Options)
 	Options = Options or {}
 
 	local State = Farm.Settings()
-	local Engine = { Mode = "Off", Filter = nil, Target = nil, Goal = nil, Arrived = false }
+	local Engine = { Mode = "Off", Filter = nil, Target = nil, Goal = nil, Arrived = false, PausedUntil = 0 }
 	local Body = Farm.Body()
 
 	local Cache = {}
@@ -682,6 +693,20 @@ function Farm.new(Feature, Options)
 		pcall(Import.Notify, Text .. ". Turn the farm back on when you are ready.", "Yen")
 	end
 
+	--/ A rubber band. With Resume on, the farm waits out the pull back and carries on by itself instead of stopping for good
+	local function Snap()
+		if not State.Resume then
+			return Halt("Server snapped you back, stopped")
+		end
+
+		Engine.PausedUntil = os.clock() + State.ResumeDelay
+		Engine.Target = nil
+		LastPos = nil
+
+		Body.Release()
+		Engine.Say("Rubber band, waiting it out")
+	end
+
 	local function Step()
 		local Common = Shared()
 
@@ -715,13 +740,20 @@ function Farm.new(Feature, Options)
 			return Engine.Say("Health low, paused")
 		end
 
+		--/ Waiting out a rubber band, hold still until the pause is over
+		if Engine.PausedUntil > os.clock() then
+			Body.Release()
+
+			return
+		end
+
 		if Engine.Mode == "Goto" then
 			Body.Hold(Model, Humanoid)
 
 			local Left, Resting, Snapped = Body.Travel(Root, Engine.Goal, State.Speed)
 
 			if Snapped then
-				Halt("Server snapped you back, stopped")
+				Snap()
 			elseif Left < 4 then
 				Engine.Arrived = true
 			elseif not Resting and Blocked(Root, Left) then
@@ -756,7 +788,7 @@ function Farm.new(Feature, Options)
 		local Distance, Resting, Snapped = Body.Travel(Root, Goal, State.Speed, Part.Position)
 
 		if Snapped then
-			return Halt("Server snapped you back, stopped")
+			return Snap()
 		end
 
 		if not Resting and Blocked(Root, Distance) then
